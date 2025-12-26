@@ -1,0 +1,357 @@
+---
+
+```markdown
+# Robot / Device Control via Next.js
+
+## Android HTTP or WebSocket Bridge Implementation Guide
+
+## Table of Contents
+
+1. Overview
+2. Architecture
+3. Prerequisites
+4. Android Bridge Implementation
+5. Next.js Integration
+6. API Reference
+7. Security Considerations
+8. Testing
+9. Troubleshooting
+10. Next Steps
+
+---
+
+## Overview
+
+This guide explains how to control a robot or hardware device from a Next.js web application using an **Android HTTP/WebSocket bridge**.
+
+The Android app runs locally on the robot or a connected Android controller. It exposes HTTP or WebSocket APIs that translate incoming requests into **native SDK or hardware commands**.
+
+This approach works for:
+
+- Service robots
+- Industrial robots
+- IoT devices
+- Embedded Android hardware
+- Custom robotics platforms
+
+---
+
+## Architecture
+
+```
+
+┌──────────────────────┐
+│ Next.js Web App │
+│ (Browser / Server) │
+└─────────┬────────────┘
+│ HTTP / WebSocket
+▼
+┌────────────────────────────┐
+│ Android Bridge Service │
+│ (Local API Layer) │
+└─────────┬──────────────────┘
+│ Native SDK Calls
+▼
+┌────────────────────────────┐
+│ Device / Robot SDK │
+│ (Motors, Sensors, Audio) │
+└─────────┬──────────────────┘
+▼
+┌────────────────────────────┐
+│ Physical Hardware │
+└────────────────────────────┘
+
+```
+
+---
+
+## Prerequisites
+
+### Android
+
+- Android Studio
+- Android device running API 14+
+- Vendor or custom hardware SDK
+- INTERNET permission enabled
+
+### Web App
+
+- Node.js 18+
+- Next.js 13+ (App Router recommended)
+- Network access to Android device IP
+
+---
+
+## Android Bridge Implementation
+
+### Step 1: Dependencies
+
+```groovy
+dependencies {
+    implementation 'com.sun.net.httpserver:http:20070405'
+    implementation 'com.google.code.gson:gson:2.8.2'
+    implementation 'org.java-websocket:Java-WebSocket:1.5.3'
+}
+```
+
+---
+
+### Step 2: Permissions
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+```
+
+---
+
+### Step 3: Bridge Service
+
+Create a background **Android Service** that:
+
+- Starts an HTTP server
+- Exposes REST endpoints
+- Calls native SDK methods
+
+Example responsibilities:
+
+- Movement control
+- Head or joint rotation
+- Speech or audio output
+- Sensor data
+- System info
+
+Service name example:
+
+```
+DeviceBridgeService
+```
+
+Key design rules:
+
+- Stateless endpoints
+- JSON in, JSON out
+- CORS enabled
+- Clear error handling
+
+---
+
+### Step 4: Start Service from Activity
+
+```java
+Intent intent = new Intent(this, DeviceBridgeService.class);
+startService(intent);
+
+// Initialize SDK managers here
+bridgeService.initializeManagers(this);
+```
+
+---
+
+### Step 5: Register Service
+
+```xml
+<service
+    android:name=".DeviceBridgeService"
+    android:enabled="true"
+    android:exported="false" />
+```
+
+---
+
+## Next.js Integration
+
+### API Client
+
+Create a thin client wrapper.
+
+```ts
+const DEVICE_IP = process.env.NEXT_PUBLIC_DEVICE_IP;
+const BASE_URL = `http://${DEVICE_IP}:8080`;
+
+export async function healthCheck() {
+  return fetch(`${BASE_URL}/api/health`).then((r) => r.json());
+}
+
+export async function move(direction: string, speed = 5) {
+  return fetch(`${BASE_URL}/api/move`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ direction, speed }),
+  }).then((r) => r.json());
+}
+```
+
+---
+
+### React Hook
+
+```ts
+export function useDevice() {
+  const [connected, setConnected] = useState(false);
+
+  const check = async () => {
+    const res = await healthCheck();
+    setConnected(res.status === "ok");
+  };
+
+  return { connected, check, move };
+}
+```
+
+---
+
+### UI Example
+
+- Buttons trigger movement
+- Sliders control speed
+- Input fields trigger speech or commands
+- Status badge shows connectivity
+
+---
+
+## API Reference (Example)
+
+### Health
+
+```
+GET /api/health
+```
+
+Response:
+
+```json
+{ "status": "ok" }
+```
+
+---
+
+### Movement
+
+```
+POST /api/move
+```
+
+```json
+{
+  "direction": "forward|back|left|right|stop",
+  "speed": 5
+}
+```
+
+---
+
+### Rotation
+
+```
+POST /api/rotate
+```
+
+```json
+{
+  "axis": "x|y|z",
+  "angle": 30,
+  "speed": 50
+}
+```
+
+---
+
+### Speech / Audio
+
+```
+POST /api/speak
+```
+
+```json
+{
+  "text": "Hello",
+  "language": "en",
+  "speed": 50
+}
+```
+
+---
+
+## Security Considerations
+
+### API Key Auth
+
+```java
+String key = exchange.getRequestHeaders().getFirst("X-API-Key");
+```
+
+---
+
+### Network Safety
+
+- Run on private LAN or VPN
+- Firewall restrict ports
+- Disable service when idle
+
+---
+
+### HTTPS
+
+Use reverse proxy (nginx, caddy) for TLS.
+
+---
+
+## Testing
+
+### Android
+
+```bash
+adb logcat | grep BridgeService
+curl http://DEVICE_IP:8080/api/health
+```
+
+---
+
+### Web
+
+```ts
+await healthCheck();
+await move("forward", 5);
+```
+
+---
+
+## Troubleshooting
+
+**Service not reachable**
+
+- Wrong IP
+- Port blocked
+- Service not running
+
+**SDK calls failing**
+
+- Managers not initialized
+- Activity context missing
+
+**CORS issues**
+
+- Ensure headers are set
+- Avoid browser direct calls in prod
+
+---
+
+## Next Steps
+
+- WebSocket support for real-time control
+- Sensor streaming
+- Camera/video feed
+- Command queues
+- Auth + roles
+- Telemetry and logging
+
+---
+
+## Conclusion
+
+This pattern cleanly separates:
+
+- UI (Next.js)
+- Control logic (Android bridge)
+- Hardware (native SDK)
